@@ -1,19 +1,20 @@
-#include "SDL/SDL.h"
 #include <stdlib.h>
 #include <unistd.h>
 #include <stdbool.h>
 #include <time.h>
 
+#include "SDL/SDL.h"
+
 /* SDL DEFINTITIONS */
-#define SCREEN_WIDTH 640
+#define SCREEN_WIDTH  640
 #define SCREEN_HEIGHT 480
 #define SCREEN_DEPTH  32
 
 /* STATES */
-#define BURNING     0xff0000
-#define PROTECTED   0x00ff00
-#define FIREFIGHTER 0x0000ff
-#define UNPROTECTED 0xffff00
+#define BURNING       0xff0000
+#define PROTECTED     0x00ff00
+#define FIREFIGHTER   0x0000ff
+#define UNPROTECTED   0xffff00
 
 typedef Uint32 state;
 
@@ -22,14 +23,12 @@ state firefighers[SCREEN_WIDTH][SCREEN_HEIGHT];
 state buffer[SCREEN_WIDTH][SCREEN_HEIGHT];
 
 void putPixel(SDL_Surface *surface, int x, int y, Uint32 pixel);
+void updateScreen(SDL_Surface *surface, Uint32 buffer[][SCREEN_HEIGHT]);
+void spreadState(state buff[][SCREEN_HEIGHT], int x, int y, state st);
 
 void initStates();
-void updateScreen(SDL_Surface *surface, Uint32 buffer[][SCREEN_HEIGHT]);
-
 void initFire();
 void updateFire();
-
-void spreadState(state buff[][SCREEN_HEIGHT], int x, int y, state st);
 
 int main(int argc, char *argv[]) {
   SDL_Surface *screen;
@@ -44,7 +43,7 @@ int main(int argc, char *argv[]) {
   /* Set Caption */
   SDL_WM_SetCaption("Firefighter Problem", NULL);
 
-  /* Initialize the screen / window */
+  /* Initialize the screen & window */
   screen = SDL_SetVideoMode(SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_DEPTH, SDL_SWSURFACE);
 
   SDL_Flip(screen);
@@ -73,6 +72,9 @@ int main(int argc, char *argv[]) {
 
 /**
  * Update the screen to a match the buffer
+ *
+ * @param{surface} - surface drawn to
+ * @param{buffer}  - pixel buffer
  */
 void updateScreen(SDL_Surface *surface, Uint32 buffer[][SCREEN_HEIGHT])
 {
@@ -85,6 +87,10 @@ void updateScreen(SDL_Surface *surface, Uint32 buffer[][SCREEN_HEIGHT])
 }
 
 
+/**
+ * Initialize pixel buffers
+ *
+ */
 void initStates() {
   int x = 0;
   int y = 0;
@@ -99,7 +105,10 @@ void initStates() {
 }
 
 
-/* Pick random location for a fire to start */
+/**
+ * Pick random location for a fire to start
+ *
+ */
 void initFire() {
   srand(time(NULL));
 
@@ -110,6 +119,10 @@ void initFire() {
 }
 
 
+/**
+ * Expand fire and update pixel buffer
+ *
+ */
 void updateFire() {
   int x = 0;
   int y = 0;
@@ -132,6 +145,11 @@ void updateFire() {
 
 }
 
+
+/**
+ * Spread state to suround x and y
+ *
+ */
 void spreadState(state buff[][SCREEN_HEIGHT], int x, int y, state st) {
 
   if(x + 1 < SCREEN_WIDTH) {
@@ -149,7 +167,8 @@ void spreadState(state buff[][SCREEN_HEIGHT], int x, int y, state st) {
 }
 
 
-/* put_pixel function sets pixel for given surface
+/**
+ * Set pixel for given surface
  */
 void putPixel(SDL_Surface *surface, int x, int y, Uint32 pixel)
 {
