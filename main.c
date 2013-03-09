@@ -5,10 +5,12 @@
 
 #include "SDL/SDL.h"
 
+
 /* SDL DEFINTITIONS */
 #define SCREEN_WIDTH  640
 #define SCREEN_HEIGHT 480
 #define SCREEN_DEPTH  32
+
 
 /* STATES */
 #define BURNING       0xff0000
@@ -16,19 +18,31 @@
 #define FIREFIGHTER   0x0000ff
 #define UNPROTECTED   0xffff00
 
+
+/* Variables to change firefigher behavior */
+
+int   total_firefighers = 1;
+int   total_fires       = 2;
+float seconds_per_turn  = 0.10f;
+
+
 typedef Uint32 state;
+
 
 state fires[SCREEN_WIDTH][SCREEN_HEIGHT];
 state firefighers[SCREEN_WIDTH][SCREEN_HEIGHT];
 state buffer[SCREEN_WIDTH][SCREEN_HEIGHT];
 
+
 void putPixel(SDL_Surface *surface, int x, int y, Uint32 pixel);
 void updateScreen(SDL_Surface *surface, Uint32 buffer[][SCREEN_HEIGHT]);
 void spreadState(state buff[][SCREEN_HEIGHT], int x, int y, state st);
 
+
 void initStates();
 void initFire();
 void updateFire();
+
 
 int main(int argc, char *argv[]) {
   SDL_Surface *screen;
@@ -147,6 +161,20 @@ void updateFire() {
 
 
 /**
+ * Loop through buffer, find fire, apply algorithm
+ *
+ * Algorithms include:
+ *  - Surrounding fire with laser precision
+ *  - Moving firefighter from a randomly selected home base
+ *    to the fire in question
+ *  - Accomodate for multiple fires
+ */
+void updateFirefighter() {
+  
+}
+
+
+/**
  * Spread state to suround x and y
  *
  */
@@ -169,6 +197,7 @@ void spreadState(state buff[][SCREEN_HEIGHT], int x, int y, state st) {
 
 /**
  * Set pixel for given surface
+ *
  */
 void putPixel(SDL_Surface *surface, int x, int y, Uint32 pixel)
 {
