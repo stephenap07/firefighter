@@ -7,8 +7,8 @@
 
 
 /* SDL DEFINTITIONS */
-#define SCREEN_WIDTH  640
-#define SCREEN_HEIGHT 480
+#define SCREEN_WIDTH  320
+#define SCREEN_HEIGHT 240
 #define SCREEN_DEPTH  32
 
 
@@ -21,13 +21,12 @@
 
 /* Variables to change firefigher behavior */
 
-int   total_firefighers = 1;
-int   total_fires       = 2;
+int   total_firefighers = 1; // Firefighters per turn
+int   total_fires       = 2; // Fires per turn
 float seconds_per_turn  = 0.10f;
 
-
 typedef Uint32 state;
-
+typedef void (*functionDef)(int * x, int * y);
 
 state fires[SCREEN_WIDTH][SCREEN_HEIGHT];
 state firefighers[SCREEN_WIDTH][SCREEN_HEIGHT];
@@ -42,6 +41,7 @@ void spreadState(state buff[][SCREEN_HEIGHT], int x, int y, state st);
 void initStates();
 void initFire();
 void updateFire();
+void updateFirefighter();
 
 
 int main(int argc, char *argv[]) {
@@ -76,8 +76,35 @@ int main(int argc, char *argv[]) {
       }
     }
 
+    if( SDL_MUSTLOCK(screen) )
+    {
+      SDL_LockSurface(screen);
+    }
+
     updateFire();
+    updateFirefighter();
+
+
+    int x = 0;
+    int y = 0;
+
+    for(x = 0; x < SCREEN_WIDTH; x++) {
+      for(y = 0; y < SCREEN_HEIGHT; y++) {
+        if(firefighers[x][y] == FIREFIGHTER ||
+           firefighers[x][y] == PROTECTED) {
+          buffer[x][y] = firefighers[x][y];
+        }
+        if(fires[x][y] == BURNING &&
+           buffer[x][y] != FIREFIGHTER &&
+           buffer[x][y] != PROTECTED) {
+          buffer[x][y] = BURNING;
+        }
+      }
+    }
+
     updateScreen(screen, buffer);
+
+    if(SDL_MUSTLOCK(screen)) SDL_UnlockSurface(screen);
 
     SDL_Flip(screen);
   }
@@ -124,12 +151,17 @@ void initStates() {
  *
  */
 void initFire() {
-  srand(time(NULL));
+  int i = 0;
+  for (i=0; i < total_fires; i++) {
+    srand(time(NULL));
 
-  int x = rand() % SCREEN_WIDTH;
-  int y = rand() % SCREEN_HEIGHT;
+    int x = rand() % SCREEN_WIDTH;
+    int y = rand() % SCREEN_HEIGHT;
 
-  fires[x][y] = BURNING;
+    printf("Fire position is %d and %d", x, y);
+
+    fires[x][y] = BURNING;
+  }
 }
 
 
@@ -149,14 +181,6 @@ void updateFire() {
     }
   }
 
-  for(x = 0; x < SCREEN_WIDTH; x++) {
-    for(y = 0; y < SCREEN_HEIGHT; y++) {
-      if(fires[x][y] == BURNING) {
-        buffer[x][y] = BURNING;
-      }
-    }
-  }
-
 }
 
 
@@ -169,8 +193,16 @@ void updateFire() {
  *    to the fire in question
  *  - Accomodate for multiple fires
  */
-void updateFirefighter() {
-  
+void updateFirefighter(functionDef algorithm) {
+
+  // Just a random drop
+  int i = 0;
+  for(i = 0; i < total_firefighers; i++) {
+    int x = 0, y = 0;
+    (*algorithm)(&x, &y);
+    firefighers[x][y] = FIREFIGHTER;
+    spreadState(firefighers, x, y, PROTECTED);
+  }
 }
 
 
@@ -194,6 +226,26 @@ void spreadState(state buff[][SCREEN_HEIGHT], int x, int y, state st) {
   }
 }
 
+/**
+ * The algorithms
+ */
+void preciseLanding(int *xOut, int *yOut) {
+  int x = 0, y = 0;
+  for(x = 0; x < SCREEN_WIDTH; x++) {
+    for(y = 0; y < SCREEN_HEIGHT; y++) {
+
+      // Get block
+      if ((x+1) > (SCREEN_WIDTH-1)) { continue; }
+      if ((y+1) > (SCREEN_HEIGHT-1)) { continue; }
+      state upLeft = buffer[x][y];
+      state upRight = buffer[x+1][y];
+      state downLeft = buffer[x][y+1];
+      state downRight = buffer[x+1][y+1];
+
+
+    }
+  }
+}
 
 /**
  * Set pixel for given surface
