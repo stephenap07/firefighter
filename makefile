@@ -1,5 +1,5 @@
 all:
-	g++ main.cpp `sdl-config --cflags` `sdl-config --libs` -o firefighter -g
+	g++ main.cpp `sdl-config --cflags` `sdl-config --libs` -lSDL_ttf -o firefighter -g
 run:
 	./firefighter
 clean:

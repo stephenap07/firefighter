@@ -5,7 +5,7 @@
 #include <time.h>
 
 #include "SDL/SDL.h"
-
+#include "SDL/SDL_ttf.h"
 
 #include "imgui.h"
 
@@ -28,7 +28,8 @@
 int total_firefighers     = 1;
 int total_fires           = 10;
 int initial_fire_steps    = 1;
-int milliseconds_per_turn = 100;
+int fire_steps = initial_fire_steps;
+int milliseconds_per_turn = 200;
 
 typedef Uint32 state;
 typedef void (*functionDef)(int);
@@ -48,20 +49,37 @@ void initFire();
 void updateFire();
 void updateFirefighter(functionDef);
 void preciseLanding(int total);
+void clearScreen(SDL_Surface*);
 
 int pollEvent(SDL_Event event);
 void renderUI(SDL_Surface *);
+
+/* UI State info */
+
+bool restart = false;
+bool done = false;
+bool isPaused = true;
+bool isInitialized = false;
+
+void init() {
+  /* Initialize vertex states */
+  initStates();
+  initFire();
+  fire_steps = initial_fire_steps;
+  isPaused = false;
+  restart = false;
+  isInitialized = true;
+}
 
 
 int main(int argc, char *argv[]) {
   /* Initialize SDL */
   SDL_Init(SDL_INIT_VIDEO);
-  atexit(SDL_Quit);
+  if( TTF_Init() == -1) {
+    exit(0);
+  }
 
-  /* Initialize vertex states */
-  initStates();
-  initFire();
-  int fire_steps = initial_fire_steps;
+  atexit(SDL_Quit);
 
   /* Set Caption */
   SDL_WM_SetCaption("Firefighter Problem", NULL);
@@ -81,90 +99,108 @@ int main(int argc, char *argv[]) {
   // Enable keyboard UNICODE processing for the text field.
   SDL_EnableUNICODE(1);  
 
- 
-  SDL_Surface *temp = SDL_LoadBMP("font14x24.bmp");
-  gFont = SDL_ConvertSurface(temp, gScreen->format, SDL_SWSURFACE);
-  SDL_FreeSurface(temp);
+  gFont = TTF_OpenFont("arial.ttf", 14); 
 
+  if (gFont == NULL) {
+    exit(0);
+  }
 
   SDL_Flip(gScreen);
+  SDL_Event event;
 
   bool quit = false;
-  bool done = false;
-  SDL_Event event;
 
   Uint32 ticks = SDL_GetTicks();
   Uint32 current_ticks = 0;
 
   while(!quit) {
+
+    if (!isPaused) {
+      if ((ticks - current_ticks) >= milliseconds_per_turn && 
+          (ticks - current_ticks) >= 0) {
+
+        if (!done) {
+          if( SDL_MUSTLOCK(gScreen) )
+          {
+            SDL_LockSurface(gScreen);
+          }
+
+          updateFire();
+
+          if (fire_steps <= 0) {
+            updateFirefighter(&preciseLanding);
+          }
+          else {
+            fire_steps--;
+          }
+
+          int x = 0;
+          int y = 0;
+          done = true;
+
+          for(x = 0; x < SCREEN_WIDTH; x++) {
+            for(y = 0; y < SCREEN_HEIGHT; y++) {
+              if(firefighers[x][y] == FIREFIGHTER ||
+                 firefighers[x][y] == PROTECTED) {
+                buffer[x][y] = firefighers[x][y];
+              }
+              if(fires[x][y] == BURNING &&
+                 buffer[x][y] != FIREFIGHTER &&
+                 buffer[x][y] != PROTECTED &&
+                 buffer[x][y] != BURNING) {
+                buffer[x][y] = BURNING;
+                done = false;
+              }
+            }
+          }
+          
+          if (done) {
+
+            for(x = 0; x < SCREEN_WIDTH; x++) {
+              for(y = 0; y < SCREEN_HEIGHT; y++) {
+                if (buffer[x][y] == UNPROTECTED) {
+                  buffer[x][y] = PROTECTED;
+                }
+              }
+            }
+
+          }
+
+
+        current_ticks = SDL_GetTicks();
+       }
+      }
+      else {
+        ticks = SDL_GetTicks();
+      }
+    }
+
+    clearScreen(gScreen);
+    updateScreen(gScreen, buffer);
+
     renderUI(gScreen);
+
+    if (restart) {
+      init();
+      done = false;
+    }
+
     int poll_result = pollEvent(event);
 
     if(poll_result >= 0) {
       return poll_result;
     }
 
-    if ((ticks - current_ticks) >= milliseconds_per_turn) {
-      current_ticks = SDL_GetTicks();
+    if(SDL_MUSTLOCK(gScreen)) SDL_UnlockSurface(gScreen);
 
-      if (!done) {
-        if( SDL_MUSTLOCK(gScreen) )
-        {
-          SDL_LockSurface(gScreen);
-        }
 
-        updateFire();
-
-        if (fire_steps <= 0) {
-          updateFirefighter(&preciseLanding);
-        }
-        else {
-          fire_steps--;
-        }
-
-        int x = 0;
-        int y = 0;
-        done = true;
-
-        for(x = 0; x < SCREEN_WIDTH; x++) {
-          for(y = 0; y < SCREEN_HEIGHT; y++) {
-            if(firefighers[x][y] == FIREFIGHTER ||
-               firefighers[x][y] == PROTECTED) {
-              buffer[x][y] = firefighers[x][y];
-            }
-            if(fires[x][y] == BURNING &&
-               buffer[x][y] != FIREFIGHTER &&
-               buffer[x][y] != PROTECTED &&
-               buffer[x][y] != BURNING) {
-              buffer[x][y] = BURNING;
-              done = false;
-            }
-          }
-        }
-        
-        if (done) {
-
-          for(x = 0; x < SCREEN_WIDTH; x++) {
-            for(y = 0; y < SCREEN_HEIGHT; y++) {
-              if (buffer[x][y] == UNPROTECTED) {
-                buffer[x][y] = PROTECTED;
-              }
-            }
-          }
-
-        }
-
-        updateScreen(gScreen, buffer);
-
-        if(SDL_MUSTLOCK(gScreen)) SDL_UnlockSurface(gScreen);
-
-        SDL_Flip(gScreen);
-      }
-    }
-    else {
-      ticks = SDL_GetTicks();
-    }
+    SDL_Flip(gScreen);
   }
+
+  TTF_CloseFont( gFont );
+
+  //Quit SDL_ttf
+  TTF_Quit();
 }
 
 
@@ -180,6 +216,16 @@ void updateScreen(SDL_Surface *surface, Uint32 buffer[][SCREEN_HEIGHT])
   for(x = 0; x < surface->w; x++) {
     for(y = 0; y < surface->h; y++) {
       putPixel(surface, x, y, buffer[x][y]);
+    }
+  }
+}
+
+void clearScreen(SDL_Surface *surface) {
+  int x = 0;
+  int y = 0;
+  for(x = 0; x < surface->w; x++) {
+    for(y = 0; y < surface->h; y++) {
+      putPixel(surface, x, y, 0);
     }
   }
 }
@@ -258,6 +304,9 @@ void updateFirefighter(functionDef algorithm) {
  *
  */
 void spreadState(state buff[][SCREEN_HEIGHT], int x, int y, state st) {
+
+  if ( x > SCREEN_WIDTH || x < 0) return;
+  if ( y > SCREEN_HEIGHT || y < 0) return;
 
   if(x + 1 < SCREEN_WIDTH) {
     buff[x + 1][y] = st;
@@ -434,16 +483,42 @@ int pollEvent(SDL_Event event) {
 void renderUI(SDL_Surface *surface)
 {   
   static int bgcolor = 0x77;
-  static char sometext[80] = "Some text";
+  static char restartText[80] = "Restart";
+  static char pauseText[80] = "Pause";
+  static char resumeText[80] = "Resume";
+  static char startText[80] = "Start";
+
+  static int buttonHeight = 40;
 
   imgui_prepare();
 
-  button(GEN_ID,50,50);
-  
+  if (!isPaused) {
+    if(button(GEN_ID, 20 , SCREEN_HEIGHT - buttonHeight, restartText)) {
+      restart = true;
+    }
+    if(button(GEN_ID, 20 + 70 , SCREEN_HEIGHT - buttonHeight, pauseText)) {
+      isPaused = true;
+    }
+  }
+  else {
+    if (!isInitialized) {
+      if(button(GEN_ID, 20 , SCREEN_HEIGHT - buttonHeight, startText)) {
+        init();
+        isPaused = false;
+      }
+    }
+    else {
+      if(button(GEN_ID, 20 , SCREEN_HEIGHT - buttonHeight, restartText)) {
+        restart = true;
+      }
+      if(button(GEN_ID, 20 + 70, SCREEN_HEIGHT - buttonHeight, resumeText)) {
+        isPaused = false;
+      }
+    }
+  }
+
+ 
   imgui_finish();
-  
-  // update the screen
-  SDL_UpdateRect(gScreen, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);    
 }
 
 

@@ -12,7 +12,8 @@
 SDL_Surface *gScreen;
 
 // Font surface
-SDL_Surface *gFont;
+TTF_Font *gFont = NULL;
+SDL_Color gTextColor = { 0, 0, 0};
 
 struct UIState
 {
@@ -32,34 +33,30 @@ struct UIState
 } 
 uistate = {0,0,0,0,0,0,0,0,0};
 
+void apply_surface(int x, int y, SDL_Surface * source, SDL_Surface *destination) {
+  SDL_Rect offset;
+
+  offset.x = x;
+  offset.y = y;
+  SDL_BlitSurface(source, NULL, destination, &offset);
+}
+
 // Draw a single character.
 // Characters are on top of each other in the font image, in ASCII order,
 // so all this routine does is just set the coordinates for the character
 // and use SDL to blit out.
-void drawchar(char ch, int x, int y)
+void drawchar(char *ch, int x, int y)
 {
-  SDL_Rect src, dst;
-  src.w = 14;
-  src.h = 24;
-  src.x = 0;
-  src.y = (ch - 32) * 24;
-  dst.w = 14;
-  dst.h = 24;
-  dst.x = x;
-  dst.y = y;
-  SDL_BlitSurface(gFont, &src, gScreen, &dst);
+  SDL_Surface *_message = TTF_RenderText_Solid(gFont, ch, gTextColor);
+  apply_surface(x, y, _message, gScreen);
+  SDL_FreeSurface(_message);
 }
 
 // Draw the string. Characters are fixed width, so this is also
 // deadly simple.
 void drawstring(char * string, int x, int y)
 {
-  while (*string)
-  {
-    drawchar(*string,x,y);
-    x += 14;
-    string++;
-  }
+  drawchar(string,x,y);
 }
 
 
@@ -87,10 +84,13 @@ int regionhit(int x, int y, int w, int h)
 }
 
 // Simple button IMGUI widget
-int button(int id, int x, int y)
+int button(int id, int x, int y, char *buffer)
 {
+  static int width = 64;
+  static int height = 24;
+
   // Check whether the button should be hot
-  if (regionhit(x, y, 64, 48))
+  if (regionhit(x, y, width, height))
   {
     uistate.hotitem = id;
     if (uistate.activeitem == 0 && uistate.mousedown)
@@ -103,27 +103,31 @@ int button(int id, int x, int y)
 
   // If we have keyboard focus, show it
   if (uistate.kbditem == id)
-    drawrect(x-6, y-6, 84, 68, 0xff0000);
+    drawrect(x-6, y-6, width + 20, height + 20, 0xff00ff);
 
   // Render button 
-  drawrect(x+8, y+8, 64, 48, 0);
+  drawrect(x+8, y+8, width, height, 0);
   if (uistate.hotitem == id)
   {
     if (uistate.activeitem == id)
     {
       // Button is both 'hot' and 'active'
-      drawrect(x+2, y+2, 64, 48, 0xffffff);
+      drawrect(x+2, y+2, width, height, 0xffffff);
     }
     else
     {
       // Button is merely 'hot'
-      drawrect(x, y, 64, 48, 0xffffff);
+      drawrect(x, y, width, height, 0xffffff);
     }
   }
   else
   {
     // button is not hot, but it may be active    
-    drawrect(x, y, 64, 48, 0xaaaaaa);
+    drawrect(x, y, width, height, 0xaaaaaa);
+  }
+
+  if (buffer != NULL) {
+    drawstring(buffer, x + strlen(buffer) ,y + height/4);
   }
 
   // If we have keyboard focus, we'll need to process the keys
