@@ -7,8 +7,8 @@
 
 
 /* SDL DEFINTITIONS */
-#define SCREEN_WIDTH  320
-#define SCREEN_HEIGHT 240
+#define SCREEN_WIDTH  640
+#define SCREEN_HEIGHT 480
 #define SCREEN_DEPTH  32
 
 
@@ -21,12 +21,13 @@
 
 /* Variables to change firefigher behavior */
 
-int   total_firefighers = 1; // Firefighters per turn
-int   total_fires       = 2; // Fires per turn
-float seconds_per_turn  = 0.10f;
+int   total_firefighers  = 5;
+int   total_fires        = 10;
+int   initial_fire_steps = 1;
+float seconds_per_turn   = 0.10f;
 
 typedef Uint32 state;
-typedef void (*functionDef)(int * x, int * y);
+typedef void (*functionDef)(int);
 
 state fires[SCREEN_WIDTH][SCREEN_HEIGHT];
 state firefighers[SCREEN_WIDTH][SCREEN_HEIGHT];
@@ -41,7 +42,8 @@ void spreadState(state buff[][SCREEN_HEIGHT], int x, int y, state st);
 void initStates();
 void initFire();
 void updateFire();
-void updateFirefighter();
+void updateFirefighter(functionDef);
+void preciseLanding(int total);
 
 
 int main(int argc, char *argv[]) {
@@ -53,6 +55,7 @@ int main(int argc, char *argv[]) {
   /* Initialize vertex states */
   initStates();
   initFire();
+  int fire_steps = initial_fire_steps;
 
   /* Set Caption */
   SDL_WM_SetCaption("Firefighter Problem", NULL);
@@ -63,6 +66,7 @@ int main(int argc, char *argv[]) {
   SDL_Flip(screen);
 
   bool quit = false;
+  bool done = false;
   SDL_Event event;
 
   while(!quit) {
@@ -76,37 +80,59 @@ int main(int argc, char *argv[]) {
       }
     }
 
-    if( SDL_MUSTLOCK(screen) )
-    {
-      SDL_LockSurface(screen);
-    }
+    if (!done) {
+      if( SDL_MUSTLOCK(screen) )
+      {
+        SDL_LockSurface(screen);
+      }
 
-    updateFire();
-    updateFirefighter();
+      updateFire();
 
+      if (fire_steps <= 0) {
+        updateFirefighter(&preciseLanding);
+      }
+      else {
+        fire_steps--;
+      }
 
-    int x = 0;
-    int y = 0;
+      int x = 0;
+      int y = 0;
+      done = true;
 
-    for(x = 0; x < SCREEN_WIDTH; x++) {
-      for(y = 0; y < SCREEN_HEIGHT; y++) {
-        if(firefighers[x][y] == FIREFIGHTER ||
-           firefighers[x][y] == PROTECTED) {
-          buffer[x][y] = firefighers[x][y];
-        }
-        if(fires[x][y] == BURNING &&
-           buffer[x][y] != FIREFIGHTER &&
-           buffer[x][y] != PROTECTED) {
-          buffer[x][y] = BURNING;
+      for(x = 0; x < SCREEN_WIDTH; x++) {
+        for(y = 0; y < SCREEN_HEIGHT; y++) {
+          if(firefighers[x][y] == FIREFIGHTER ||
+             firefighers[x][y] == PROTECTED) {
+            buffer[x][y] = firefighers[x][y];
+          }
+          if(fires[x][y] == BURNING &&
+             buffer[x][y] != FIREFIGHTER &&
+             buffer[x][y] != PROTECTED &&
+             buffer[x][y] != BURNING) {
+            buffer[x][y] = BURNING;
+            done = false;
+          }
         }
       }
+      
+      if (done) {
+
+        for(x = 0; x < SCREEN_WIDTH; x++) {
+          for(y = 0; y < SCREEN_HEIGHT; y++) {
+            if (buffer[x][y] == UNPROTECTED) {
+              buffer[x][y] = PROTECTED;
+            }
+          }
+        }
+
+      }
+
+      updateScreen(screen, buffer);
+
+      if(SDL_MUSTLOCK(screen)) SDL_UnlockSurface(screen);
+
+      SDL_Flip(screen);
     }
-
-    updateScreen(screen, buffer);
-
-    if(SDL_MUSTLOCK(screen)) SDL_UnlockSurface(screen);
-
-    SDL_Flip(screen);
   }
 }
 
@@ -153,12 +179,10 @@ void initStates() {
 void initFire() {
   int i = 0;
   for (i=0; i < total_fires; i++) {
-    srand(time(NULL));
+    srand(time(NULL) + i);
 
     int x = rand() % SCREEN_WIDTH;
     int y = rand() % SCREEN_HEIGHT;
-
-    printf("Fire position is %d and %d", x, y);
 
     fires[x][y] = BURNING;
   }
@@ -194,15 +218,7 @@ void updateFire() {
  *  - Accomodate for multiple fires
  */
 void updateFirefighter(functionDef algorithm) {
-
-  // Just a random drop
-  int i = 0;
-  for(i = 0; i < total_firefighers; i++) {
-    int x = 0, y = 0;
-    (*algorithm)(&x, &y);
-    firefighers[x][y] = FIREFIGHTER;
-    spreadState(firefighers, x, y, PROTECTED);
-  }
+  (*algorithm)(total_firefighers);
 }
 
 
@@ -226,25 +242,75 @@ void spreadState(state buff[][SCREEN_HEIGHT], int x, int y, state st) {
   }
 }
 
+// AXIOMS
+const int PRECISE_AXIOMS[4][4] = {
+  {UNPROTECTED, UNPROTECTED, UNPROTECTED, BURNING},
+  {UNPROTECTED, UNPROTECTED, BURNING,     UNPROTECTED},
+  {UNPROTECTED, BURNING,     UNPROTECTED, UNPROTECTED},
+  {BURNING,     UNPROTECTED, UNPROTECTED, UNPROTECTED},
+};
+
 /**
  * The algorithms
  */
-void preciseLanding(int *xOut, int *yOut) {
+void preciseLanding(int total) {
   int x = 0, y = 0;
+
   for(x = 0; x < SCREEN_WIDTH; x++) {
     for(y = 0; y < SCREEN_HEIGHT; y++) {
 
-      // Get block
+      if (total <= 0) {
+        return;
+      }
+
       if ((x+1) > (SCREEN_WIDTH-1)) { continue; }
       if ((y+1) > (SCREEN_HEIGHT-1)) { continue; }
-      state upLeft = buffer[x][y];
-      state upRight = buffer[x+1][y];
-      state downLeft = buffer[x][y+1];
-      state downRight = buffer[x+1][y+1];
 
+      int radius[4] = {
+        buffer[x][y], buffer[x+1][y],
+        buffer[x][y+1], buffer[x+1][y+1]
+      };
+      
+      int i = 0;
+
+      for(i = 0; i < 4; i++) {
+        if (radius[0] == PRECISE_AXIOMS[i][0] && 
+            radius[1] == PRECISE_AXIOMS[i][1] && 
+            radius[2] == PRECISE_AXIOMS[i][2] && 
+            radius[3] == PRECISE_AXIOMS[i][3])
+        {
+          int x1 = 0;
+          int y1 = 0;
+
+          switch(i) {
+            case 0:
+              x1 = 0;
+              y1 = 0;
+              break;
+            case 1:
+              x1 = 1;
+              y1 = 0;
+              break;
+            case 2: 
+              x1 = 0;
+              y1 = 1;
+              break;
+            case 3:
+              x1 = 1;
+              y1 = 1;
+              break;
+          };
+
+          firefighers[x + x1][y + y1] = FIREFIGHTER;
+          spreadState(firefighers, x + x1, y + y1, PROTECTED);
+          total--;
+          break;
+        }
+      }
 
     }
   }
+
 }
 
 /**
