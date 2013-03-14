@@ -53,6 +53,12 @@ void clearScreen(SDL_Surface*);
 
 int pollEvent(SDL_Event event);
 void renderUI();
+void showStats();
+
+/* end variables */
+int total_protected = 0;
+int total_burned= 0;
+int number_of_firefighters = 0;
 
 /* UI State info */
 
@@ -70,6 +76,9 @@ void init() {
   isPaused = false;
   restart = false;
   isInitialized = true;
+  total_burned = 0;
+  total_protected = 0;
+  number_of_firefighters = 0;
 }
 
 
@@ -161,6 +170,14 @@ int main(int argc, char *argv[]) {
               for(y = 0; y < SCREEN_HEIGHT; y++) {
                 if (buffer[x][y] == UNPROTECTED) {
                   buffer[x][y] = PROTECTED;
+                  total_protected++;
+                }
+                if (buffer[x][y] == FIREFIGHTER) {
+                  number_of_firefighters++;
+                  total_protected++;
+                }
+                if (buffer[x][y] == BURNING) {
+                  total_burned++;
                 }
               }
             }
@@ -194,7 +211,6 @@ int main(int argc, char *argv[]) {
 
     if(SDL_MUSTLOCK(gScreen)) SDL_UnlockSurface(gScreen);
 
-
     SDL_Flip(gScreen);
   }
 
@@ -226,7 +242,7 @@ void clearScreen(SDL_Surface *surface) {
   int y = 0;
   for(x = 0; x < surface->w; x++) {
     for(y = 0; y < surface->h; y++) {
-      putPixel(surface, x, y, 0);
+      putPixel(surface, x, y, 0xff0000ff);
     }
   }
 }
@@ -499,12 +515,37 @@ void showSliders() {
   renderSlider(400, 40, totalFiresMessage, 50, total_fires);
 }
 
+void showStats() {
+  char initialFireMessage[80];
+  char firesPerTurnMessage[80];
+  char protectedMessage[80];
+  char percentProtectedMessage[80];
+  char burnedMessage[80];
+  char totalFirefighterMessage[80];
+
+  sprintf(initialFireMessage, "INTIAL FIRES: %d", total_fires);
+  sprintf(firesPerTurnMessage, "FIREFIGHTERS PER TURN: %d", total_firefighers);
+  sprintf(protectedMessage, "TOTAL PROTECTED: %d / %d", total_protected, SCREEN_WIDTH*SCREEN_HEIGHT);
+  sprintf(percentProtectedMessage, "PERCENT PROTECTED: %f", (float)total_protected/(SCREEN_WIDTH*SCREEN_HEIGHT));
+  sprintf(burnedMessage, "TOTAL BURNED: %d/%d", total_burned, SCREEN_WIDTH*SCREEN_HEIGHT);
+  sprintf(totalFirefighterMessage, "TOTAL FIREFIGHTERS USED: %d", number_of_firefighters);
+
+  char *messages[] = {initialFireMessage, firesPerTurnMessage, protectedMessage, percentProtectedMessage, burnedMessage, totalFirefighterMessage};
+
+  int i = 0;
+  for(i = 0; i < 6; i++) {
+    SDL_Surface *_message = TTF_RenderText_Solid(gFont, messages[i], gTextColor);
+    apply_surface(100, 40 + 15*i, _message, gScreen);
+    SDL_FreeSurface(_message);
+  }
+}
+
 // Rendering function
 void renderUI()
 {   
   static int bgcolor = 0x77;
   static char restartText[80] = "Restart";
-  static char pauseText[80] = "Pause";
+  static char pauseText[80] = "Change";
   static char resumeText[80] = "Resume";
   static char startText[80] = "Start";
 
@@ -540,6 +581,10 @@ void renderUI()
       }
       showSliders();
     }
+  }
+
+  if (done) {
+    showStats();
   }
  
   imgui_finish();
