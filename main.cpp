@@ -52,7 +52,7 @@ void preciseLanding(int total);
 void clearScreen(SDL_Surface*);
 
 int pollEvent(SDL_Event event);
-void renderUI(SDL_Surface *);
+void renderUI();
 
 /* UI State info */
 
@@ -60,6 +60,7 @@ bool restart = false;
 bool done = false;
 bool isPaused = true;
 bool isInitialized = false;
+bool slidersChanged = false;
 
 void init() {
   /* Initialize vertex states */
@@ -178,7 +179,7 @@ int main(int argc, char *argv[]) {
     clearScreen(gScreen);
     updateScreen(gScreen, buffer);
 
-    renderUI(gScreen);
+    renderUI();
 
     if (restart) {
       init();
@@ -479,8 +480,27 @@ int pollEvent(SDL_Event event) {
   return -1;
 }
 
+void renderSlider(int x, int y, char *message, int range, int &var) {
+  SDL_Surface *_message = TTF_RenderText_Solid(gFont, message, gTextColor); 
+  apply_surface(x - 10, y - 15, _message, gScreen);
+  if (slider(GEN_ID + x, x, y, range, var)) {
+    slidersChanged = true;
+  }
+
+  SDL_FreeSurface(_message);
+}
+
+void showSliders() {
+  char totalFireFigherMessage[80];
+  char totalFiresMessage[80];
+  sprintf(totalFireFigherMessage, "total firefighters: %d", total_firefighers);
+  sprintf(totalFiresMessage, "total fires: %d", total_fires);
+  renderSlider(500, 40, totalFireFigherMessage, 50, total_firefighers);
+  renderSlider(400, 40, totalFiresMessage, 50, total_fires);
+}
+
 // Rendering function
-void renderUI(SDL_Surface *surface)
+void renderUI()
 {   
   static int bgcolor = 0x77;
   static char restartText[80] = "Restart";
@@ -505,6 +525,7 @@ void renderUI(SDL_Surface *surface)
       if(button(GEN_ID, 20 , SCREEN_HEIGHT - buttonHeight, startText)) {
         init();
         isPaused = false;
+        slidersChanged = false;
       }
     }
     else {
@@ -513,10 +534,13 @@ void renderUI(SDL_Surface *surface)
       }
       if(button(GEN_ID, 20 + 70, SCREEN_HEIGHT - buttonHeight, resumeText)) {
         isPaused = false;
+        if ( slidersChanged ) {
+          restart = true;
+        }
       }
+      showSliders();
     }
   }
-
  
   imgui_finish();
 }
