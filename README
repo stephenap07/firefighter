@@ -1,0 +1,2 @@
+install sdl-dev
+make && make run
