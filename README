@@ -1,2 +1,3 @@
-install sdl-dev
+install sdl-1.2
+install sdl_ttf
 make && make run
