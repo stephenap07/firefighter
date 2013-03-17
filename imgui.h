@@ -45,7 +45,7 @@ void apply_surface(int x, int y, SDL_Surface * source, SDL_Surface *destination)
 // Characters are on top of each other in the font image, in ASCII order,
 // so all this routine does is just set the coordinates for the character
 // and use SDL to blit out.
-void drawchar(char *ch, int x, int y)
+void drawchar(const char *ch, int x, int y)
 {
   SDL_Surface *_message = TTF_RenderText_Solid(gFont, ch, gTextColor);
   apply_surface(x, y, _message, gScreen);
@@ -54,7 +54,7 @@ void drawchar(char *ch, int x, int y)
 
 // Draw the string. Characters are fixed width, so this is also
 // deadly simple.
-void drawstring(char * string, int x, int y)
+void drawstring(const char * string, int x, int y)
 {
   drawchar(string,x,y);
 }
@@ -291,7 +291,7 @@ int textfield(int id, int x, int y, char *buffer)
 
   // Render cursor if we have keyboard focus
   if (uistate.kbditem == id && (SDL_GetTicks() >> 8) & 1)
-    drawstring("_",x + len * 14, y);
+    drawstring("_", x + len * 14, y);
 
   // If we have keyboard focus, we'll need to process the keys
   if (uistate.kbditem == id)

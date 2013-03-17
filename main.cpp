@@ -347,35 +347,33 @@ const int PRECISE_AXIOMS[4][4] = {
   {BURNING,     UNPROTECTED, UNPROTECTED, UNPROTECTED},
 };
 
+inline bool followsAxiom(int box[4], int i) {
+  return (box[0] == PRECISE_AXIOMS[i][0] && 
+          box[1] == PRECISE_AXIOMS[i][1] && 
+          box[2] == PRECISE_AXIOMS[i][2] && 
+          box[3] == PRECISE_AXIOMS[i][3]);
+}
+
 /**
  * The algorithms
  */
 void preciseLanding(int total) {
   int x = 0, y = 0;
 
-  for(x = 0; x < SCREEN_WIDTH; x++) {
-    for(y = 0; y < SCREEN_HEIGHT; y++) {
+  for(x = 0; x < (SCREEN_WIDTH-1); x++) {
+    for(y = 0; y < (SCREEN_HEIGHT-1); y++) {
 
       if (total <= 0) {
         return;
       }
 
-      if ((x+1) > (SCREEN_WIDTH-1)) { continue; }
-      if ((y+1) > (SCREEN_HEIGHT-1)) { continue; }
-
-      int radius[4] = {
-        buffer[x][y], buffer[x+1][y],
+      int radius[4] = { 
+        buffer[x][y],   buffer[x+1][y],
         buffer[x][y+1], buffer[x+1][y+1]
       };
       
-      int i = 0;
-
-      for(i = 0; i < 4; i++) {
-        if (radius[0] == PRECISE_AXIOMS[i][0] && 
-            radius[1] == PRECISE_AXIOMS[i][1] && 
-            radius[2] == PRECISE_AXIOMS[i][2] && 
-            radius[3] == PRECISE_AXIOMS[i][3])
-        {
+      for(int i = 0; i < 4; i++) {
+        if (followsAxiom(radius, i)){
           int x1 = 0;
           int y1 = 0;
 
