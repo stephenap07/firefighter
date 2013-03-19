@@ -29,7 +29,7 @@ int total_firefighers     = 1;
 int total_fires           = 10;
 int initial_fire_steps    = 1;
 int fire_steps = initial_fire_steps;
-int milliseconds_per_turn = 200;
+int milliseconds_per_turn = 10;
 
 typedef Uint32 state;
 typedef void (*functionDef)(int);
@@ -48,7 +48,9 @@ void initStates();
 void initFire();
 void updateFire();
 void updateFirefighter(functionDef);
-void preciseLanding(int total);
+void leftPreciseLanding(int);
+void rightPreciseLanding(int);
+void horizontalPreciseLanding(int);
 void clearScreen(SDL_Surface*);
 
 int pollEvent(SDL_Event event);
@@ -138,7 +140,9 @@ int main(int argc, char *argv[]) {
           updateFire();
 
           if (fire_steps <= 0) {
-            updateFirefighter(&preciseLanding);
+            int _total = (total_firefighers/2 > 0) ? total_firefighers/2 : 1;
+            leftPreciseLanding(_total);
+            rightPreciseLanding(_total);
           }
           else {
             fire_steps--;
@@ -347,22 +351,46 @@ const int PRECISE_AXIOMS[4][4] = {
   {BURNING,     UNPROTECTED, UNPROTECTED, UNPROTECTED},
 };
 
-inline bool followsAxiom(int box[4], int i) {
-  return (box[0] == PRECISE_AXIOMS[i][0] && 
-          box[1] == PRECISE_AXIOMS[i][1] && 
-          box[2] == PRECISE_AXIOMS[i][2] && 
-          box[3] == PRECISE_AXIOMS[i][3]);
+
+inline bool calculateAxiom(int box[4], int * x1, int * y1) {
+  for(int i = 0; i < 4; i++) {
+    if (box[0] == PRECISE_AXIOMS[i][0] && 
+        box[1] == PRECISE_AXIOMS[i][1] && 
+        box[2] == PRECISE_AXIOMS[i][2] && 
+        box[3] == PRECISE_AXIOMS[i][3]){
+      switch(i) {
+        case 0:
+          *x1 = 0;
+          *y1 = 0;
+          break;
+        case 1:
+          *x1 = 1;
+          *y1 = 0;
+          break;
+        case 2: 
+          *x1 = 0;
+          *y1 = 1;
+          break;
+        case 3:
+          *x1 = 1;
+          *y1 = 1;
+          break;
+      };
+      return true;
+    }
+  }
+  return false;
 }
 
 /**
- * The algorithms
+ * The algorithm
  */
-void preciseLanding(int total) {
+void leftPreciseLanding(int total) {
   int x = 0, y = 0;
 
   for(x = 0; x < (SCREEN_WIDTH-1); x++) {
     for(y = 0; y < (SCREEN_HEIGHT-1); y++) {
-
+      
       if (total <= 0) {
         return;
       }
@@ -371,38 +399,79 @@ void preciseLanding(int total) {
         buffer[x][y],   buffer[x+1][y],
         buffer[x][y+1], buffer[x+1][y+1]
       };
+
+      int x1 = 0;
+      int y1 = 0;
+
+      if (calculateAxiom(radius, &x1, &y1)) {
+        firefighers[x + x1][y + y1] = FIREFIGHTER;
+        spreadState(firefighers, x + x1, y + y1, PROTECTED);
+
+        total--;
+      }
+    }
+  }
+
+}
+
+void rightPreciseLanding(int total) {
+  int x = 0, y = 0;
+
+  for(x = SCREEN_WIDTH; x > 1; x--) {
+    for(y = SCREEN_HEIGHT; y > 1; y--) {
       
-      for(int i = 0; i < 4; i++) {
-        if (followsAxiom(radius, i)){
-          int x1 = 0;
-          int y1 = 0;
-
-          switch(i) {
-            case 0:
-              x1 = 0;
-              y1 = 0;
-              break;
-            case 1:
-              x1 = 1;
-              y1 = 0;
-              break;
-            case 2: 
-              x1 = 0;
-              y1 = 1;
-              break;
-            case 3:
-              x1 = 1;
-              y1 = 1;
-              break;
-          };
-
-          firefighers[x + x1][y + y1] = FIREFIGHTER;
-          spreadState(firefighers, x + x1, y + y1, PROTECTED);
-          total--;
-          break;
-        }
+      if (total <= 0) {
+        return;
       }
 
+      int radius[4] = { 
+        buffer[x][y],   buffer[x+1][y],
+        buffer[x][y+1], buffer[x+1][y+1]
+      };
+
+      int x1 = 0;
+      int y1 = 0;
+
+      if (calculateAxiom(radius, &x1, &y1)) {
+        firefighers[x + x1][y + y1] = FIREFIGHTER;
+        spreadState(firefighers, x + x1, y + y1, PROTECTED);
+
+        total--;
+      }
+    }
+  }
+
+}
+
+void horizontalPreciseLanding(int total) {
+  int x = 0, y = 0;
+
+  for(x = 0; x < (SCREEN_WIDTH-1); x++) {
+    for(y = 0; y < (SCREEN_HEIGHT-1); y++) {
+      int x2 = x;
+      
+      if (x % 2) {
+        x2 = SCREEN_WIDTH - x;
+      }
+
+      if (total <= 0) {
+        return;
+      }
+
+      int radius[4] = { 
+        buffer[x2][y],   buffer[x2+1][y],
+        buffer[x2][y+1], buffer[x2+1][y+1]
+      };
+
+      int x1 = 0;
+      int y1 = 0;
+
+      if (calculateAxiom(radius, &x1, &y1)) {
+        firefighers[x2 + x1][y + y1] = FIREFIGHTER;
+        spreadState(firefighers, x2 + x1, y + y1, PROTECTED);
+
+        total--;
+      }
     }
   }
 
