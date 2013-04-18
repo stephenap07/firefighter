@@ -42,6 +42,7 @@ typedef struct {
 
   entity_t *robber;
   entity_t *cops;
+
 } state_t;
 
 void initCells(SDL_Surface *screen);
@@ -78,20 +79,21 @@ int main(int argc, char *argv[]) {
   /* Initialize the screen / window */
   screen = SDL_SetVideoMode(SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_DEPTH, SDL_SWSURFACE);
 
-  entity_t cop = {rand() % MAP_WIDTH, rand() % MAP_HEIGHT, COP};
-  entity_t cop2 = {rand() % MAP_WIDTH, rand() % MAP_HEIGHT, COP};
   entity_t robber = {rand() % MAP_WIDTH, rand() % MAP_HEIGHT, ROBBER};
   robber.pathfind = &robberSimpleRun;
 
-  const int COP_COUNT= 2;
-  entity_t cops[COP_COUNT] = {cop, cop2};
+  const int COP_COUNT= 5;
+  entity_t cops[COP_COUNT];
+  for(int i = 0; i < COP_COUNT; i++) {
+    cops[i] = (entity_t){rand() % MAP_WIDTH, rand() % MAP_HEIGHT, COP};
+  }
 
   for(int i = 0; i < COP_COUNT; i++) {
     cops[i].pathfind = &copSimpleCatch;
   }
 
   state_t state = {
-    2, 300, 0, MAP_SIZE, SCREEN_WIDTH, SCREEN_HEIGHT, false, false, &robber, cops
+    COP_COUNT, 300, 0, MAP_SIZE, SCREEN_WIDTH, SCREEN_HEIGHT, false, false, &robber, cops
   };
 
   SDL_Event event;
