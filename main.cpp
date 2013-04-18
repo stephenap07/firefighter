@@ -9,514 +9,149 @@
 
 #include "imgui.h"
 
-
 /* SDL DEFINTITIONS */
 #define SCREEN_WIDTH  640
 #define SCREEN_HEIGHT 480
 #define SCREEN_DEPTH  32
 
-
-/* STATES */
-#define BURNING       0xff0000
-#define PROTECTED     0x00ff00
-#define FIREFIGHTER   0x0000ff
-#define UNPROTECTED   0xffff00
-
-
-/* Variables to change firefigher behavior */
-
-int total_firefighers     = 1;
-int total_fires           = 10;
-int initial_fire_steps    = 1;
-int fire_steps = initial_fire_steps;
-int milliseconds_per_turn = 10;
-
-typedef Uint32 state;
-typedef void (*functionDef)(int);
-
-state fires[SCREEN_WIDTH][SCREEN_HEIGHT];
-state firefighers[SCREEN_WIDTH][SCREEN_HEIGHT];
-state buffer[SCREEN_WIDTH][SCREEN_HEIGHT];
-
-
-void putPixel(SDL_Surface *surface, int x, int y, Uint32 pixel);
-void updateScreen(SDL_Surface *surface, Uint32 buffer[][SCREEN_HEIGHT]);
-void spreadState(state buff[][SCREEN_HEIGHT], int x, int y, state st);
-
-
-void initStates();
-void initFire();
-void updateFire();
-void updateFirefighter(functionDef);
-void leftPreciseLanding(int);
-void rightPreciseLanding(int);
-void horizontalPreciseLanding(int);
-void clearScreen(SDL_Surface*);
-
 int pollEvent(SDL_Event event);
-void renderUI();
-void showStats();
+void initCells(SDL_Surface *screen);
 
-/* end variables */
-int total_protected = 0;
-int total_burned= 0;
-int number_of_firefighters = 0;
+const unsigned int MAP_SIZE   = 20;
+const unsigned int MAP_WIDTH  = SCREEN_WIDTH/MAP_SIZE;
+const unsigned int MAP_HEIGHT = SCREEN_HEIGHT/MAP_SIZE;
+const unsigned int COP        = 0xff0000ff;             // BLUE
+const unsigned int ROBBER     = 0x0000ffff;             // RED
 
-/* UI State info */
+typedef struct {
+  int x;
+  int y;
+  Uint32 color;
+} entity_t;
 
-bool restart = false;
-bool done = false;
-bool isPaused = true;
-bool isInitialized = false;
-bool slidersChanged = false;
+typedef struct {
+  int numCops; 
+  int turnRate;
+  int numTurns;
+  int mapSize;
+  int mapWidth;
+  int mapHeight;
 
-void init() {
-  /* Initialize vertex states */
-  initStates();
-  initFire();
-  fire_steps = initial_fire_steps;
-  isPaused = false;
-  restart = false;
-  isInitialized = true;
-  total_burned = 0;
-  total_protected = 0;
-  number_of_firefighters = 0;
-}
+  entity_t *robber;
+  entity_t *cops;
+} state_t;
 
+void initCells(SDL_Surface *screen);
+void drawGrid(SDL_Surface *screen, Uint32 color);
+void clearScreen(SDL_Surface *screen, Uint32 color);
+void putPixel(SDL_Surface *surface, int x, int y, Uint32 pixel);
+void putCell(SDL_Surface *screen, int x, int y, Uint32 color);
+void displayCells(SDL_Surface *screen, state_t *state);
+void doTurn(state_t *state);
 
 int main(int argc, char *argv[]) {
+  SDL_Surface *screen = gScreen;
+  Uint8       *p;
+  int         x = 10; //x coordinate of our pixel
+  int         y = 20; //y coordinate of our pixel
+
   /* Initialize SDL */
   SDL_Init(SDL_INIT_VIDEO);
-  if( TTF_Init() == -1) {
-    exit(0);
-  }
 
   atexit(SDL_Quit);
 
-  /* Set Caption */
-  SDL_WM_SetCaption("Firefighter Problem", NULL);
+  srand(time(NULL));
 
-  /* Initialize the screen & window */
-  gScreen = SDL_SetVideoMode(SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_DEPTH, SDL_SWSURFACE);
+  /* Initialize the screen / window */
+  screen = SDL_SetVideoMode(SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_DEPTH, SDL_SWSURFACE);
 
-  // If we fail, return error.
-  if (gScreen == NULL) 
-  {
-    fprintf(stderr, "Unable to set up video: %s\n", SDL_GetError());
-    exit(1);
-  }
+  entity_t cop = {rand() % MAP_WIDTH, rand() % MAP_HEIGHT, COP};
+  entity_t cop2 = {rand() % MAP_WIDTH, rand() % MAP_HEIGHT, COP};
+  entity_t robber = {rand() % MAP_WIDTH, rand() % MAP_HEIGHT, ROBBER};
 
-  // Enable keyboard repeat to make sliders more tolerable
-  SDL_EnableKeyRepeat(SDL_DEFAULT_REPEAT_DELAY, SDL_DEFAULT_REPEAT_INTERVAL);
-  // Enable keyboard UNICODE processing for the text field.
-  SDL_EnableUNICODE(1);  
+  const int ENT_COUNT= 2;
+  entity_t cops[ENT_COUNT] = {cop, cop2};
 
-  gFont = TTF_OpenFont("arial.ttf", 14); 
+  state_t state = {
+    2, 300, 0, MAP_SIZE, SCREEN_WIDTH, SCREEN_HEIGHT, &robber, cops
+  };
 
-  if (gFont == NULL) {
-    exit(0);
-  }
-
-  SDL_Flip(gScreen);
   SDL_Event event;
 
   bool quit = false;
-
-  Uint32 ticks = SDL_GetTicks();
-  Uint32 current_ticks = 0;
+  unsigned long ticks = 0;
+  unsigned long delta = 0;
+  unsigned long lastTick = SDL_GetTicks(); 
 
   while(!quit) {
+    delta = SDL_GetTicks() - lastTick;
+    lastTick = SDL_GetTicks();
+    ticks += delta;
 
-    if (!isPaused) {
-      if ((ticks - current_ticks) >= milliseconds_per_turn && 
-          (ticks - current_ticks) >= 0) {
-
-        if (!done) {
-          if( SDL_MUSTLOCK(gScreen) )
-          {
-            SDL_LockSurface(gScreen);
-          }
-
-          updateFire();
-
-          if (fire_steps <= 0) {
-            int _total = (total_firefighers/2 > 0) ? total_firefighers/2 : 1;
-            leftPreciseLanding(_total);
-            rightPreciseLanding(_total);
-          }
-          else {
-            fire_steps--;
-          }
-
-          int x = 0;
-          int y = 0;
-          done = true;
-
-          for(x = 0; x < SCREEN_WIDTH; x++) {
-            for(y = 0; y < SCREEN_HEIGHT; y++) {
-              if(firefighers[x][y] == FIREFIGHTER ||
-                 firefighers[x][y] == PROTECTED) {
-                buffer[x][y] = firefighers[x][y];
-              }
-              if(fires[x][y] == BURNING &&
-                 buffer[x][y] != FIREFIGHTER &&
-                 buffer[x][y] != PROTECTED &&
-                 buffer[x][y] != BURNING) {
-                buffer[x][y] = BURNING;
-                done = false;
-              }
-            }
-          }
-          
-          if (done) {
-
-            for(x = 0; x < SCREEN_WIDTH; x++) {
-              for(y = 0; y < SCREEN_HEIGHT; y++) {
-                if (buffer[x][y] == UNPROTECTED) {
-                  buffer[x][y] = PROTECTED;
-                  total_protected++;
-                }
-                if (buffer[x][y] == FIREFIGHTER) {
-                  number_of_firefighters++;
-                  total_protected++;
-                }
-                if (buffer[x][y] == BURNING) {
-                  total_burned++;
-                }
-              }
-            }
-
-          }
-
-
-        current_ticks = SDL_GetTicks();
-       }
-      }
-      else {
-        ticks = SDL_GetTicks();
-      }
+    int eventCode = pollEvent(event); 
+    if (eventCode > -1) {
+      quit = true;
     }
 
-    clearScreen(gScreen);
-    updateScreen(gScreen, buffer);
+    clearScreen(screen, 0xffffffff);
+    drawGrid(screen, 0x00000000);
+    displayCells(screen, &state);
 
-    renderUI();
-
-    if (restart) {
-      init();
-      done = false;
+    if(ticks >= state.turnRate) {
+      doTurn(&state);
+      ticks = 0;
     }
 
-    int poll_result = pollEvent(event);
-
-    if(poll_result >= 0) {
-      return poll_result;
-    }
-
-    if(SDL_MUSTLOCK(gScreen)) SDL_UnlockSurface(gScreen);
-
-    SDL_Flip(gScreen);
+    SDL_Flip(screen);
   }
 
-  TTF_CloseFont( gFont );
-
-  //Quit SDL_ttf
-  TTF_Quit();
 }
 
+void doTurn(state_t *state) {
+  state->cops[0].x--; 
 
-/**
- * Update the screen to a match the buffer
- *
- * @param{surface} - surface drawn to
- * @param{buffer}  - pixel buffer
- */
-void updateScreen(SDL_Surface *surface, Uint32 buffer[][SCREEN_HEIGHT])
-{
-  int x = 0 , y = 0;
-  for(x = 0; x < surface->w; x++) {
-    for(y = 0; y < surface->h; y++) {
-      putPixel(surface, x, y, buffer[x][y]);
+  if(state->cops[0].x < 0) {
+   state->cops[0].x = state->mapWidth/state->mapSize - 1;
+  }
+}
+
+void displayCells(SDL_Surface *screen, state_t *state) {
+  putCell(screen, state->robber->x, state->robber->y, state->robber->color);
+  for (int i = 0; i < state->numCops; i++) {
+    putCell(screen, state->cops[i].x, state->cops[i].y, state->cops[i].color);
+  }
+}
+
+void putCell(SDL_Surface *screen, int x, int y, Uint32 color) {
+  for(int j = 1; j < MAP_SIZE; j++) {
+    for (int k = 1; k < MAP_SIZE; k++) {
+      putPixel(screen, x * MAP_SIZE + k, y * MAP_SIZE + j, color);
+    }     
+  }
+}
+
+void clearScreen(SDL_Surface *screen, Uint32 color) {
+  for (int y = 0; y < SCREEN_HEIGHT; y++) {
+    for (int x = 0; x < SCREEN_WIDTH; x++) {
+      putPixel(screen, x, y, color);
     }
   }
 }
 
-void clearScreen(SDL_Surface *surface) {
-  int x = 0;
-  int y = 0;
-  for(x = 0; x < surface->w; x++) {
-    for(y = 0; y < surface->h; y++) {
-      putPixel(surface, x, y, 0xff0000ff);
-    }
+void drawGrid(SDL_Surface *screen, Uint32 color) {
+  // Draw horizontal lines
+  for(int y = 0; y < MAP_HEIGHT; y++) {
+    for (int x = 0; x < SCREEN_WIDTH; x++) {
+      putPixel(screen, x, MAP_SIZE*y, color);
+    }     
+  }
+
+  for(int x = 0; x < MAP_WIDTH; x++) {
+    for (int y = 0; y < SCREEN_HEIGHT; y++) {
+      putPixel(screen, x*MAP_SIZE, y, color);
+    }     
   }
 }
-
-
-/**
- * Initialize pixel buffers
- *
- */
-void initStates() {
-  int x = 0;
-  int y = 0;
-
-  for(x = 0; x < SCREEN_WIDTH; x++) {
-    for(y = 0; y < SCREEN_HEIGHT; y++) {
-      fires[x][y] = 0;
-      firefighers[x][y] = 0;
-      buffer[x][y] = UNPROTECTED;
-    }
-  }
-}
-
-
-/**
- * Pick random location for a fire to start
- *
- */
-void initFire() {
-  int i = 0;
-  for (i=0; i < total_fires; i++) {
-    srand(time(NULL) + i);
-
-    int x = rand() % SCREEN_WIDTH;
-    int y = rand() % SCREEN_HEIGHT;
-
-    fires[x][y] = BURNING;
-  }
-}
-
-
-/**
- * Expand fire and update pixel buffer
- *
- */
-void updateFire() {
-  int x = 0;
-  int y = 0;
-
-  for(x = 0; x < SCREEN_WIDTH; x++) {
-    for(y = 0; y < SCREEN_HEIGHT; y++) {
-      if(buffer[x][y] == BURNING) {
-        spreadState(fires, x, y, BURNING);
-      }
-    }
-  }
-
-}
-
-
-/**
- * Loop through buffer, find fire, apply algorithm
- *
- * Algorithms include:
- *  - Surrounding fire with laser precision
- *  - Moving firefighter from a randomly selected home base
- *    to the fire in question
- *  - Accomodate for multiple fires
- */
-void updateFirefighter(functionDef algorithm) {
-  (*algorithm)(total_firefighers);
-}
-
-
-/**
- * Spread state to suround x and y
- *
- */
-void spreadState(state buff[][SCREEN_HEIGHT], int x, int y, state st) {
-
-  if ( x > SCREEN_WIDTH || x < 0) return;
-  if ( y > SCREEN_HEIGHT || y < 0) return;
-
-  if(x + 1 < SCREEN_WIDTH) {
-    buff[x + 1][y] = st;
-  }
-  if(x - 1 > 0) {
-    buff[x - 1][y] = st;
-  }
-  if(y + 1 < SCREEN_HEIGHT) {
-    buff[x][y + 1] = st;
-  }
-  if(y - 1 > 0) {
-    buff[x][y - 1] = st;
-  }
-}
-
-// AXIOMS
-const int PRECISE_AXIOMS[4][4] = {
-  {UNPROTECTED, UNPROTECTED, UNPROTECTED, BURNING},
-  {UNPROTECTED, UNPROTECTED, BURNING,     UNPROTECTED},
-  {UNPROTECTED, BURNING,     UNPROTECTED, UNPROTECTED},
-  {BURNING,     UNPROTECTED, UNPROTECTED, UNPROTECTED},
-};
-
-
-inline bool calculateAxiom(int box[4], int * x1, int * y1) {
-  for(int i = 0; i < 4; i++) {
-    if (box[0] == PRECISE_AXIOMS[i][0] && 
-        box[1] == PRECISE_AXIOMS[i][1] && 
-        box[2] == PRECISE_AXIOMS[i][2] && 
-        box[3] == PRECISE_AXIOMS[i][3]){
-      switch(i) {
-        case 0:
-          *x1 = 0;
-          *y1 = 0;
-          break;
-        case 1:
-          *x1 = 1;
-          *y1 = 0;
-          break;
-        case 2: 
-          *x1 = 0;
-          *y1 = 1;
-          break;
-        case 3:
-          *x1 = 1;
-          *y1 = 1;
-          break;
-      };
-      return true;
-    }
-  }
-  return false;
-}
-
-/**
- * The algorithm
- */
-void leftPreciseLanding(int total) {
-  int x = 0, y = 0;
-
-  for(x = 0; x < (SCREEN_WIDTH-1); x++) {
-    for(y = 0; y < (SCREEN_HEIGHT-1); y++) {
-      
-      if (total <= 0) {
-        return;
-      }
-
-      int radius[4] = { 
-        buffer[x][y],   buffer[x+1][y],
-        buffer[x][y+1], buffer[x+1][y+1]
-      };
-
-      int x1 = 0;
-      int y1 = 0;
-
-      if (calculateAxiom(radius, &x1, &y1)) {
-        firefighers[x + x1][y + y1] = FIREFIGHTER;
-        spreadState(firefighers, x + x1, y + y1, PROTECTED);
-
-        total--;
-      }
-    }
-  }
-
-}
-
-void rightPreciseLanding(int total) {
-  int x = 0, y = 0;
-
-  for(x = SCREEN_WIDTH; x > 1; x--) {
-    for(y = SCREEN_HEIGHT; y > 1; y--) {
-      
-      if (total <= 0) {
-        return;
-      }
-
-      int radius[4] = { 
-        buffer[x][y],   buffer[x+1][y],
-        buffer[x][y+1], buffer[x+1][y+1]
-      };
-
-      int x1 = 0;
-      int y1 = 0;
-
-      if (calculateAxiom(radius, &x1, &y1)) {
-        firefighers[x + x1][y + y1] = FIREFIGHTER;
-        spreadState(firefighers, x + x1, y + y1, PROTECTED);
-
-        total--;
-      }
-    }
-  }
-
-}
-
-void horizontalPreciseLanding(int total) {
-  int x = 0, y = 0;
-
-  for(x = 0; x < (SCREEN_WIDTH-1); x++) {
-    for(y = 0; y < (SCREEN_HEIGHT-1); y++) {
-      int x2 = x;
-      
-      if (x % 2) {
-        x2 = SCREEN_WIDTH - x;
-      }
-
-      if (total <= 0) {
-        return;
-      }
-
-      int radius[4] = { 
-        buffer[x2][y],   buffer[x2+1][y],
-        buffer[x2][y+1], buffer[x2+1][y+1]
-      };
-
-      int x1 = 0;
-      int y1 = 0;
-
-      if (calculateAxiom(radius, &x1, &y1)) {
-        firefighers[x2 + x1][y + y1] = FIREFIGHTER;
-        spreadState(firefighers, x2 + x1, y + y1, PROTECTED);
-
-        total--;
-      }
-    }
-  }
-
-}
-
-/**
- * Set pixel for given surface
- *
- */
-void putPixel(SDL_Surface *surface, int x, int y, Uint32 pixel)
-{
-  int bpp = surface->format->BytesPerPixel;
-  /* Here p is the address to the pixel we want to set */
-  Uint8 *p = (Uint8 *)surface->pixels + y * surface->pitch + x * bpp;
-
-  switch(bpp) {
-    case 1:
-      *p = pixel;
-      break;
-
-    case 2:
-      *(Uint16 *)p = pixel;
-      break;
-
-    case 3:
-      if(SDL_BYTEORDER == SDL_BIG_ENDIAN) {
-        p[0] = (pixel >> 16) & 0xff;
-        p[1] = (pixel >> 8) & 0xff;
-        p[2] = pixel & 0xff;
-      } else {
-        p[0] = pixel & 0xff;
-        p[1] = (pixel >> 8) & 0xff;
-        p[2] = (pixel >> 16) & 0xff;
-      }
-      break;
-
-    case 4:
-      *(Uint32 *)p = pixel;
-      break;
-  }
-}
-
-/**
- * IMGUI Stuff
- */
 
 int pollEvent(SDL_Event event) {
   // Poll for events, and handle the ones we care about.
@@ -563,99 +198,35 @@ int pollEvent(SDL_Event event) {
   return -1;
 }
 
-void renderSlider(int x, int y, char *message, int range, int &var) {
-  SDL_Surface *_message = TTF_RenderText_Solid(gFont, message, gTextColor); 
-  apply_surface(x - 10, y - 15, _message, gScreen);
-  if (slider(GEN_ID + x, x, y, range, var)) {
-    slidersChanged = true;
-  }
+void putPixel(SDL_Surface *surface, int x, int y, Uint32 pixel)
+{
+  int bpp = surface->format->BytesPerPixel;
+  /* Here p is the address to the pixel we want to set */
+  Uint8 *p = (Uint8 *)surface->pixels + y * surface->pitch + x * bpp;
 
-  SDL_FreeSurface(_message);
-}
+  switch(bpp) {
+    case 1:
+      *p = pixel;
+      break;
 
-void showSliders() {
-  char totalFireFigherMessage[80];
-  char totalFiresMessage[80];
-  sprintf(totalFireFigherMessage, "total firefighters: %d", total_firefighers);
-  sprintf(totalFiresMessage, "total fires: %d", total_fires);
-  renderSlider(500, 40, totalFireFigherMessage, 50, total_firefighers);
-  renderSlider(400, 40, totalFiresMessage, 50, total_fires);
-}
+    case 2:
+      *(Uint16 *)p = pixel;
+      break;
 
-void showStats() {
-  char initialFireMessage[80];
-  char firesPerTurnMessage[80];
-  char protectedMessage[80];
-  char percentProtectedMessage[80];
-  char burnedMessage[80];
-  char totalFirefighterMessage[80];
-
-  sprintf(initialFireMessage, "INTIAL FIRES: %d", total_fires);
-  sprintf(firesPerTurnMessage, "FIREFIGHTERS PER TURN: %d", total_firefighers);
-  sprintf(protectedMessage, "TOTAL PROTECTED: %d / %d", total_protected, SCREEN_WIDTH*SCREEN_HEIGHT);
-  sprintf(percentProtectedMessage, "PERCENT PROTECTED: %f", (float)total_protected/(SCREEN_WIDTH*SCREEN_HEIGHT));
-  sprintf(burnedMessage, "TOTAL BURNED: %d/%d", total_burned, SCREEN_WIDTH*SCREEN_HEIGHT);
-  sprintf(totalFirefighterMessage, "TOTAL FIREFIGHTERS USED: %d", number_of_firefighters);
-
-  char *messages[] = {initialFireMessage, firesPerTurnMessage, protectedMessage, percentProtectedMessage, burnedMessage, totalFirefighterMessage};
-
-  int i = 0;
-  for(i = 0; i < 6; i++) {
-    SDL_Surface *_message = TTF_RenderText_Solid(gFont, messages[i], gTextColor);
-    apply_surface(100, 40 + 15*i, _message, gScreen);
-    SDL_FreeSurface(_message);
-  }
-}
-
-// Rendering function
-void renderUI()
-{   
-  static int bgcolor = 0x77;
-  static char restartText[80] = "Restart";
-  static char pauseText[80] = "Change";
-  static char resumeText[80] = "Resume";
-  static char startText[80] = "Start";
-
-  static int buttonHeight = 40;
-
-  imgui_prepare();
-
-  if (!isPaused) {
-    if(button(GEN_ID, 20 , SCREEN_HEIGHT - buttonHeight, restartText)) {
-      restart = true;
-    }
-    if(button(GEN_ID, 20 + 70 , SCREEN_HEIGHT - buttonHeight, pauseText)) {
-      isPaused = true;
-    }
-  }
-  else {
-    if (!isInitialized) {
-      if(button(GEN_ID, 20 , SCREEN_HEIGHT - buttonHeight, startText)) {
-        init();
-        isPaused = false;
-        slidersChanged = false;
+    case 3:
+      if(SDL_BYTEORDER == SDL_BIG_ENDIAN) {
+        p[0] = (pixel >> 16) & 0xff;
+        p[1] = (pixel >> 8) & 0xff;
+        p[2] = pixel & 0xff;
+      } else {
+        p[0] = pixel & 0xff;
+        p[1] = (pixel >> 8) & 0xff;
+        p[2] = (pixel >> 16) & 0xff;
       }
-    }
-    else {
-      if(button(GEN_ID, 20 , SCREEN_HEIGHT - buttonHeight, restartText)) {
-        restart = true;
-      }
-      if(button(GEN_ID, 20 + 70, SCREEN_HEIGHT - buttonHeight, resumeText)) {
-        isPaused = false;
-        if ( slidersChanged ) {
-          restart = true;
-        }
-      }
-      showSliders();
-    }
-  }
+      break;
 
-  if (done) {
-    showStats();
+    case 4:
+      *(Uint32 *)p = pixel;
+      break;
   }
- 
-  imgui_finish();
 }
-
-
-
