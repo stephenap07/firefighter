@@ -23,10 +23,11 @@ const unsigned int MAP_HEIGHT = SCREEN_HEIGHT/MAP_SIZE;
 const unsigned int COP        = 0xff0000ff;             // BLUE
 const unsigned int ROBBER     = 0x0000ffff;             // RED
 
-typedef struct {
+typedef struct entity {
   int x;
   int y;
   Uint32 color;
+  bool (*pathfind)(struct entity *self, struct entity *target);
 } entity_t;
 
 typedef struct {
@@ -36,6 +37,8 @@ typedef struct {
   int mapSize;
   int mapWidth;
   int mapHeight;
+  bool caughtRobber;
+  bool pause;
 
   entity_t *robber;
   entity_t *cops;
@@ -47,7 +50,11 @@ void clearScreen(SDL_Surface *screen, Uint32 color);
 void putPixel(SDL_Surface *surface, int x, int y, Uint32 pixel);
 void putCell(SDL_Surface *screen, int x, int y, Uint32 color);
 void displayCells(SDL_Surface *screen, state_t *state);
-void doTurn(state_t *state);
+bool copSimpleCatch(entity_t *self, entity_t *target);
+bool robberSimpleRun(entity_t *self, entity_t *target);
+
+// UI
+void showStats(SDL_Surface *screen, TTF_Font *font, state_t *state);
 
 int main(int argc, char *argv[]) {
   SDL_Surface *screen = gScreen;
@@ -57,6 +64,12 @@ int main(int argc, char *argv[]) {
 
   /* Initialize SDL */
   SDL_Init(SDL_INIT_VIDEO);
+  if( TTF_Init() == -1) {
+    fputs("Error loading font\n", stderr);
+    exit(0);
+  }
+
+  TTF_Font * font = TTF_OpenFont("arial.ttf", 32);
 
   atexit(SDL_Quit);
 
@@ -68,12 +81,17 @@ int main(int argc, char *argv[]) {
   entity_t cop = {rand() % MAP_WIDTH, rand() % MAP_HEIGHT, COP};
   entity_t cop2 = {rand() % MAP_WIDTH, rand() % MAP_HEIGHT, COP};
   entity_t robber = {rand() % MAP_WIDTH, rand() % MAP_HEIGHT, ROBBER};
+  robber.pathfind = &robberSimpleRun;
 
-  const int ENT_COUNT= 2;
-  entity_t cops[ENT_COUNT] = {cop, cop2};
+  const int COP_COUNT= 2;
+  entity_t cops[COP_COUNT] = {cop, cop2};
+
+  for(int i = 0; i < COP_COUNT; i++) {
+    cops[i].pathfind = &copSimpleCatch;
+  }
 
   state_t state = {
-    2, 300, 0, MAP_SIZE, SCREEN_WIDTH, SCREEN_HEIGHT, &robber, cops
+    2, 300, 0, MAP_SIZE, SCREEN_WIDTH, SCREEN_HEIGHT, false, false, &robber, cops
   };
 
   SDL_Event event;
@@ -93,13 +111,28 @@ int main(int argc, char *argv[]) {
       quit = true;
     }
 
+    if(state.caughtRobber) {
+      state.pause = true;
+    }
+
     clearScreen(screen, 0xffffffff);
     drawGrid(screen, 0x00000000);
     displayCells(screen, &state);
 
-    if(ticks >= state.turnRate) {
-      doTurn(&state);
-      ticks = 0;
+    if(!state.pause) {
+      if(ticks >= state.turnRate) {
+        robber.pathfind(&robber, state.cops);
+        for(int i = 0; i < state.numCops; i++) {
+          if(state.cops[i].pathfind(&state.cops[i], &robber)) {
+            state.caughtRobber = true;
+          }
+        }
+        state.numTurns++;
+        ticks = 0;
+      }
+    }
+    else {
+      showStats(screen, font, &state); 
     }
 
     SDL_Flip(screen);
@@ -107,12 +140,46 @@ int main(int argc, char *argv[]) {
 
 }
 
-void doTurn(state_t *state) {
-  state->cops[0].x--; 
-
-  if(state->cops[0].x < 0) {
-   state->cops[0].x = state->mapWidth/state->mapSize - 1;
+bool copSimpleCatch(entity_t *self, entity_t *target) {
+  if(self->x < target->x) {
+    self->x++;
   }
+  else if(self->x > target->x) {
+    self->x--;
+  }
+
+  if(self->y < target->y) {
+    self->y++;
+  }
+  else if(self->y > target->y) {
+    self->y--;
+  }
+
+  if(self->x == target->x && self->y == target->y) {
+    return true;
+  }
+
+  return false;
+}
+
+bool robberSimpleRun(entity_t *self, entity_t *target) {
+  self->x += (rand() % 2) ? -1 : 1;
+  self->y += (rand() % 2) ? -1 : 1;
+
+  if(self->x < 0) {
+    self->x = 0;
+  }
+  if(self->x > MAP_WIDTH - 1) {
+    self->x = MAP_WIDTH - 1;
+  }
+
+  if(self->y < 0) {
+    self->y = 0;
+  }
+  if(self->y > MAP_HEIGHT -  1) {
+    self->y = MAP_HEIGHT - 1;
+  }
+  return true;
 }
 
 void displayCells(SDL_Surface *screen, state_t *state) {
@@ -196,6 +263,23 @@ int pollEvent(SDL_Event event) {
   }
 
   return -1;
+}
+
+void showStats(SDL_Surface *screen, TTF_Font *font, state_t *state) {
+  char numTurns[80];
+  char numCops[80];
+
+  sprintf(numCops, "Number of Cops: %d", state->numCops);
+  sprintf(numTurns, "Number of Turns: %d", state->numTurns);
+
+  char *messages[] = {numTurns, numCops};
+
+  int i = 0;
+  for(i = 0; i < 2; i++) {
+    SDL_Surface *_message = TTF_RenderText_Solid(font, messages[i], gTextColor);
+    apply_surface(SCREEN_WIDTH/2 - 130, SCREEN_HEIGHT/4 + 30*i, _message, screen);
+    SDL_FreeSurface(_message);
+  }
 }
 
 void putPixel(SDL_Surface *surface, int x, int y, Uint32 pixel)
