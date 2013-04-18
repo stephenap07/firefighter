@@ -1,7 +1,7 @@
 all:
-	g++ main.cpp `sdl-config --cflags` `sdl-config --libs` -lSDL_ttf -o firefighter -O2
+	g++ main.cpp `sdl-config --cflags` `sdl-config --libs` -lSDL_ttf -o copsnrobbers -O2
 run:
-	./firefighter
+	./copsnrobbers
 clean:
 	rm *.o
-	rm firefighter
+	rm copsnrobbers
